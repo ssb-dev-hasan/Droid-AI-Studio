@@ -1,31 +1,28 @@
-export type AIProvider = "gemini" | "openai" | "claude";
-
-export interface ProjectMeta {
-  projectName: string;
-  packageName: string;
-  logoBase64: string;
-  logoMimeType: string;
+export interface ProjectFile {
+  path: string;
+  content: string;
+  language?: string;
 }
 
-export interface CodeError {
-  id: string;
+export interface StudioProject {
+  name: string;
+  packageName: string;
+  description: string;
+  logoDataUrl?: string;
+  logoFileName?: string;
+  files: ProjectFile[];
+}
+
+export interface ValidationIssue {
   filePath: string;
-  line: number;
+  line?: number;
   message: string;
+  severity: "error" | "warning";
 }
 
 export interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
-  imagePreview?: string;
-}
-
-export interface StudioUserConfig {
-  userId: string;
-  aiProvider: AIProvider;
-  apiKey: string;
-  repoUrl: string;
-  githubToken: string;
-  branch: string;
+  timestamp: number;
 }
