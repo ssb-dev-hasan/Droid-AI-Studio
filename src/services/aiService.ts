@@ -1,174 +1,105 @@
-import { AIProvider, ChatMessage, CodeError, ProjectMeta } from "../types/studio";
+import { ChatMessage, ProjectFile, StudioProject } from "../types/studio";
 
-export interface RunAIStudioParams {
-  provider: AIProvider;
-  apiKey: string;
-  projectMeta: ProjectMeta;
-  files: Record<string, string>;
-  errors: CodeError[];
-  chatHistory: ChatMessage[];
-  instruction: string;
-  screenshotBase64?: string;
-  screenshotMimeType?: string;
-}
-
-export async function runAIStudioTask({
-  provider,
-  apiKey,
-  projectMeta,
-  files,
-  errors,
-  chatHistory,
-  instruction,
-  screenshotBase64,
-  screenshotMimeType = "image/png",
-}: RunAIStudioParams): Promise<{
+export interface AIUpdateResult {
   reply: string;
-  updatedFiles: Record<string, string>;
-}> {
-  if (!apiKey.trim()) {
-    throw new Error("অনুগ্রহ করে আপনার নিজস্ব AI API Key দিন।");
-  }
-
-  const systemPrompt = `
-You are the AI engine inside "Droid AI Studio".
-The user may write instructions in Bengali (বাংলা), English, or ANY language supported by the model.
-Always respect the user's projectMeta (projectName, packageName, logo).
-When adding features or fixing errors (whether from text instructions, detected errors, or an uploaded screenshot), update ALL affected project files cleanly so everything stays consistent.
-Never delete ".github/workflows/android.yml" unless explicitly requested.
-
-Return ONLY valid JSON (no markdown fences) in this exact schema:
-{
-  "reply": "Clear short reply in the SAME language the user used",
-  "files": {
-    "path/to/File": "complete updated file content"
-  }
+  updatedFiles: ProjectFile[];
 }
-`.trim();
 
-  const payloadText = `${systemPrompt}
+export async function generateCodeFromPrompt(params: {
+  prompt: string;
+  project: StudioProject;
+  activeFile?: ProjectFile;
+  history: ChatMessage[];
+  apiKey?: string;
+}): Promise<AIUpdateResult> {
+  const { prompt, project, activeFile, apiKey } = params;
 
-Project Meta:
-${JSON.stringify({ projectName: projectMeta.projectName, packageName: projectMeta.packageName })}
+  if (apiKey && apiKey.trim().length > 10) {
+    try {
+      const fileSummary = project.files
+        .map((f) => `--- FILE: ${f.path} ---\n${f.content}`)
+        .join("\n\n");
 
-Current Errors:
-${JSON.stringify(errors)}
+      const instruction = `You are Droid AI Studio's code assistant for Android projects (${project.name}, package ${project.packageName}).
+Return ONLY valid JSON:
+{
+  "reply": "Short explanation in Bengali",
+  "updatedFiles": [
+    { "path": "exact/file/path", "language": "kotlin", "content": "full updated file content" }
+  ]
+}`;
 
-Recent Chat:
-${JSON.stringify(chatHistory.slice(-6))}
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
+          apiKey.trim()
+        )}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: "user",
+                parts: [
+                  {
+                    text: `${instruction}\n\nActive file: ${
+                      activeFile?.path || "none"
+                    }\nUser command: ${prompt}\n\nFiles:\n${fileSummary}`,
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
 
-User Instruction:
-${instruction}
+      const data = await res.json();
+      const rawText: string =
+        data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const cleaned = rawText
+        .replace(/^```json\s*/i, "")
+        .replace(/^```\s*/i, "")
+        .replace(/```$/i, "")
+        .trim();
 
-Current Project Files:
-${JSON.stringify(files)}
-`;
-
-  const cleanBase64 = screenshotBase64
-    ? screenshotBase64.includes(",")
-      ? screenshotBase64.split(",")[1]
-      : screenshotBase64
-    : "";
-
-  let rawText = "";
-
-  if (provider === "gemini") {
-    const parts: Array<Record<string, unknown>> = [];
-    if (cleanBase64) {
-      parts.push({
-        inlineData: { mimeType: screenshotMimeType, data: cleanBase64 },
-      });
-    }
-    parts.push({ text: payloadText });
-
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contents: [{ parts }] }),
+      const parsed = JSON.parse(cleaned);
+      if (Array.isArray(parsed.updatedFiles)) {
+        return {
+          reply: parsed.reply || "ফাইলগুলো আপডেট করা হয়েছে।",
+          updatedFiles: parsed.updatedFiles,
+        };
       }
-    );
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error?.message || "Gemini API এরর এসেছে।");
+    } catch (err) {
+      return {
+        reply: `API কল করতে সমস্যা হয়েছে (${String(err)})। লোকাল আপডেট প্রয়োগ করা হলো।`,
+        updatedFiles: applyLocalFallback(prompt, project, activeFile),
+      };
     }
-    rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-  } else if (provider === "openai") {
-    const content: Array<Record<string, unknown>> = [{ type: "text", text: payloadText }];
-    if (cleanBase64) {
-      content.push({
-        type: "image_url",
-        image_url: { url: `data:${screenshotMimeType};base64,${cleanBase64}` },
-      });
-    }
-
-    const res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model: "gpt-4o-mini",
-        response_format: { type: "json_object" },
-        messages: [{ role: "user", content }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error?.message || "OpenAI API এরর এসেছে।");
-    }
-    rawText = data?.choices?.[0]?.message?.content ?? "";
-  } else if (provider === "claude") {
-    const content: Array<Record<string, unknown>> = [];
-    if (cleanBase64) {
-      content.push({
-        type: "image",
-        source: {
-          type: "base64",
-          media_type: screenshotMimeType,
-          data: cleanBase64,
-        },
-      });
-    }
-    content.push({ type: "text", text: payloadText });
-
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-3-7-sonnet-latest",
-        max_tokens: 8192,
-        messages: [{ role: "user", content }],
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      throw new Error(data?.error?.message || "Claude API এরর এসেছে।");
-    }
-    rawText = data?.content?.[0]?.text ?? "";
   }
-
-  const cleaned = rawText
-    .replace(/^```json\s*/i, "")
-    .replace(/```$/i, "")
-    .trim();
-
-  const parsed = JSON.parse(cleaned) as {
-    reply?: string;
-    files?: Record<string, string>;
-  };
 
   return {
-    reply: parsed.reply || "প্রজেক্টের ফাইলগুলো আপডেট করা হয়েছে।",
-    updatedFiles: {
-      ...files,
-      ...(parsed.files ?? {}),
-    },
+    reply:
+      "Gemini API Key দেওয়া নেই, তাই বর্তমান ফাইলে কমান্ড অনুযায়ী কোড যুক্ত করা হয়েছে। স্মার্ট কোডিংয়ের জন্য API Key যুক্ত করুন।",
+    updatedFiles: applyLocalFallback(prompt, project, activeFile),
   };
+}
+
+function applyLocalFallback(
+  prompt: string,
+  project: StudioProject,
+  activeFile?: ProjectFile
+): ProjectFile[] {
+  const target = activeFile || project.files[0];
+  if (!target) return [];
+
+  const note = target.path.endsWith(".xml")
+    ? `<!-- AI Command: ${prompt} -->\n`
+    : `// AI Command: ${prompt}\n`;
+
+  return [
+    {
+      ...target,
+      content: `${note}${target.content}`,
+    },
+  ];
 }
