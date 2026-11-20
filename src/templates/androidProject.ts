@@ -1,83 +1,77 @@
-import { ProjectMeta } from "../types/studio";
+import { ProjectFile, StudioProject } from "../types/studio";
 
-export function createDefaultAndroidWorkflow(): string {
-  return `name: Build Android App (Droid AI Studio)
-
-on:
-  push:
-    branches: [ "main" ]
-  workflow_dispatch:
-
-jobs:
-  build:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug
-
-      - name: Upload APK Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: android-app-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-`;
+export interface CreateProjectInput {
+  name: string;
+  packageName: string;
+  description?: string;
+  logoDataUrl?: string;
+  logoFileName?: string;
 }
 
-export function createInitialProjectFiles(meta: ProjectMeta): Record<string, string> {
-  const pkgPath = meta.packageName.replace(/\./g, "/");
+export function createAndroidProjectTemplate(input: CreateProjectInput): StudioProject {
+  const safeName = input.name.trim() || "MyDroidApp";
+  const pkg = input.packageName.trim() || "com.example.mydroidapp";
+  const pkgPath = pkg.replace(/\./g, "/");
 
-  return {
-    ".github/workflows/android.yml": createDefaultAndroidWorkflow(),
-    "settings.gradle.kts": `rootProject.name = "${meta.projectName}"\ninclude(":app")\n`,
-    "app/build.gradle.kts": `plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
-}
+  const files: ProjectFile[] = [
+    {
+      path: `app/src/main/java/${pkgPath}/MainActivity.kt`,
+      language: "kotlin",
+      content: `package ${pkg}
 
-android {
-    namespace = "${meta.packageName}"
-    compileSdk = 34
+import android.os.Bundle
+import androidx.activity.ComponentActivity
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.layout.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 
-    defaultConfig {
-        applicationId = "${meta.packageName}"
-        minSdk = 24
-        targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
-    }
-
-    buildFeatures {
-        viewBinding = true
+class MainActivity : ComponentActivity() {
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContent {
+            MaterialTheme {
+                Surface(modifier = Modifier.fillMaxSize()) {
+                    GreetingScreen("${safeName}")
+                }
+            }
+        }
     }
 }
 
-dependencies {
-    implementation("androidx.core:core-ktx:1.13.1")
-    implementation("androidx.appcompat:appcompat:1.7.0")
-    implementation("com.google.android.material:material:1.12.0")
-    implementation("androidx.constraintlayout:constraintlayout:2.1.4")
+@Composable
+fun GreetingScreen(appName: String) {
+    Column(modifier = Modifier.padding(24.dp)) {
+        Text(text = appName, style = MaterialTheme.typography.headlineMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(text = "Built with Droid AI Studio")
+    }
 }
 `,
-    "app/src/main/AndroidManifest.xml": `<?xml version="1.0" encoding="utf-8"?>
+    },
+    {
+      path: "app/src/main/res/values/strings.xml",
+      language: "xml",
+      content: `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">${safeName}</string>
+</resources>
+`,
+    },
+    {
+      path: "app/src/main/AndroidManifest.xml",
+      language: "xml",
+      content: `<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <application
         android:allowBackup="true"
+        android:label="@string/app_name"
         android:icon="@mipmap/ic_launcher"
-        android:label="${meta.projectName}"
-        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".MainActivity"
             android:exported="true">
@@ -89,66 +83,45 @@ dependencies {
     </application>
 </manifest>
 `,
-    [`app/src/main/java/${pkgPath}/MainActivity.kt`]: `package ${meta.packageName}
+    },
+    {
+      path: "app/build.gradle.kts",
+      language: "kotlin",
+      content: `plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+}
 
-import android.os.Bundle
-import android.widget.Button
-import android.widget.TextView
-import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
+android {
+    namespace = "${pkg}"
+    compileSdk = 35
 
-class MainActivity : AppCompatActivity() {
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val titleText = findViewById<TextView>(R.id.tvTitle)
-        val actionBtn = findViewById<Button>(R.id.btnAction)
-
-        titleText.text = "${meta.projectName}"
-        actionBtn.setOnClickListener {
-            Toast.makeText(this, "${meta.projectName} Ready!", Toast.LENGTH_SHORT).show()
-        }
+    defaultConfig {
+        applicationId = "${pkg}"
+        minSdk = 24
+        targetSdk = 35
+        versionCode = 1
+        versionName = "1.0"
     }
 }
 `,
-    "app/src/main/res/layout/activity_main.xml": `<?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:gravity="center"
-    android:orientation="vertical"
-    android:padding="24dp">
+    },
+  ];
 
-    <ImageView
-        android:id="@+id/ivAppLogo"
-        android:layout_width="96dp"
-        android:layout_height="96dp"
-        android:contentDescription="App Logo"
-        android:src="@mipmap/ic_launcher" />
+  if (input.logoDataUrl) {
+    files.push({
+      path: "app/src/main/res/drawable/app_logo_base64.txt",
+      language: "text",
+      content: `Logo File: ${input.logoFileName || "logo.png"}\nData URL:\n${input.logoDataUrl}`,
+    });
+  }
 
-    <TextView
-        android:id="@+id/tvTitle"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="${meta.projectName}"
-        android:textSize="22sp"
-        android:textStyle="bold" />
-
-    <Button
-        android:id="@+id/btnAction"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="20dp"
-        android:text="Start App" />
-</LinearLayout>
-`,
-    "app/src/main/res/values/strings.xml": `<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">${meta.projectName}</string>
-</resources>
-`,
-    "app/src/main/res/mipmap-xxxhdpi/logo_base64.txt": meta.logoBase64 || "",
+  return {
+    name: safeName,
+    packageName: pkg,
+    description: input.description || `${safeName} Android Project`,
+    logoDataUrl: input.logoDataUrl,
+    logoFileName: input.logoFileName,
+    files,
   };
 }
