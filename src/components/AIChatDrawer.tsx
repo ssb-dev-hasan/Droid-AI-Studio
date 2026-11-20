@@ -1,144 +1,97 @@
-import { useState } from "react";
-import { AIProvider, ChatMessage } from "../types/studio";
+import React, { useState } from "react";
+import { ChatMessage } from "../types/studio";
 
-interface Props {
-  provider: AIProvider;
-  apiKey: string;
-  onChangeProvider: (p: AIProvider) => void;
-  onChangeApiKey: (key: string) => void;
-  messages: ChatMessage[];
-  loading: boolean;
-  onSend: (text: string, screenshotBase64?: string, mimeType?: string) => void;
+interface AIChatDrawerProps {
+  isOpen: boolean;
   onClose: () => void;
+  messages: ChatMessage[];
+  apiKey: string;
+  onChangeApiKey: (key: string) => void;
+  onSendCommand: (prompt: string) => Promise<void>;
+  isLoading: boolean;
 }
 
-export function AIChatDrawer({
-  provider,
-  apiKey,
-  onChangeProvider,
-  onChangeApiKey,
-  messages,
-  loading,
-  onSend,
+export const AIChatDrawer: React.FC<AIChatDrawerProps> = ({
+  isOpen,
   onClose,
-}: Props) {
-  const [input, setInput] = useState("");
-  const [imgBase64, setImgBase64] = useState<string>("");
-  const [imgMime, setImgMime] = useState<string>("image/png");
+  messages,
+  apiKey,
+  onChangeApiKey,
+  onSendCommand,
+  isLoading,
+}) => {
+  const [prompt, setPrompt] = useState("");
 
-  function handleScreenshot(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setImgMime(file.type || "image/png");
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setImgBase64(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
-  }
+  if (!isOpen) return null;
 
-  function handleSubmit(e: React.FormEvent) {
+  const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() && !imgBase64) return;
-    onSend(
-      input.trim() || "স্ক্রিনশটের এররটি ঠিক করে ফাইল আপডেট করো।",
-      imgBase64 || undefined,
-      imgMime
-    );
-    setInput("");
-    setImgBase64("");
-  }
+    if (!prompt.trim() || isLoading) return;
+    const text = prompt.trim();
+    setPrompt("");
+    await onSendCommand(text);
+  };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 flex flex-col justify-end sm:justify-center sm:items-center p-0 sm:p-4">
-      <div className="w-full max-w-lg h-[88vh] sm:h-[78vh] rounded-t-2xl sm:rounded-2xl bg-slate-900 border border-slate-700 flex flex-col text-white overflow-hidden">
-        <div className="p-3 border-b border-slate-800 flex items-center justify-between">
-          <span className="font-bold text-sm">Droid AI Assistant (বাংলা / যেকোনো ভাষা)</span>
-          <button onClick={onClose} className="text-xs px-2 py-1 rounded bg-slate-800">
-            বন্ধ করুন
-          </button>
-        </div>
+    <div className="fixed inset-y-0 right-0 z-40 flex w-full max-w-md flex-col border-l border-slate-800 bg-slate-900 text-white shadow-2xl">
+      <div className="flex items-center justify-between border-b border-slate-800 p-4">
+        <h3 className="font-bold">AI কোড অ্যাসিস্ট্যান্ট</h3>
+        <button onClick={onClose} className="text-slate-400 hover:text-white">
+          ✕
+        </button>
+      </div>
 
-        {/* নিজস্ব AI Provider & API Key */}
-        <div className="p-2.5 bg-slate-950/70 border-b border-slate-800 grid grid-cols-3 gap-2">
-          <select
-            value={provider}
-            onChange={(e) => onChangeProvider(e.target.value as AIProvider)}
-            className="rounded bg-slate-800 border border-slate-700 px-2 py-1.5 text-xs"
+      <div className="border-b border-slate-800 p-3">
+        <label className="mb-1 block text-xs text-slate-400">Gemini API Key (ঐচ্ছিক)</label>
+        <input
+          type="password"
+          value={apiKey}
+          onChange={(e) => onChangeApiKey(e.target.value)}
+          placeholder="AIza..."
+          className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs"
+        />
+      </div>
+
+      <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        {messages.map((m) => (
+          <div
+            key={m.id}
+            className={`rounded-lg p-3 text-sm ${
+              m.role === "user"
+                ? "ml-8 bg-blue-600/30 border border-blue-500/40"
+                : "mr-8 bg-slate-800 border border-slate-700"
+            }`}
           >
-            <option value="gemini">Gemini</option>
-            <option value="openai">OpenAI</option>
-            <option value="claude">Claude</option>
-          </select>
-          <input
-            type="password"
-            value={apiKey}
-            onChange={(e) => onChangeApiKey(e.target.value)}
-            placeholder="আপনার API Key"
-            className="col-span-2 rounded bg-slate-800 border border-slate-700 px-2.5 py-1.5 text-xs"
-          />
-        </div>
-
-        {/* চ্যাট মেসেজ */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
-          {messages.map((m) => (
-            <div
-              key={m.id}
-              className={`max-w-[85%] rounded-xl p-2.5 text-xs whitespace-pre-wrap ${
-                m.role === "user"
-                  ? "ml-auto bg-blue-600 text-white"
-                  : "bg-slate-800 text-slate-100"
-              }`}
-            >
-              {m.imagePreview && (
-                <img
-                  src={m.imagePreview}
-                  alt="Screenshot"
-                  className="mb-1.5 max-h-36 rounded-lg object-contain"
-                />
-              )}
-              {m.content}
+            <div className="mb-1 text-[11px] text-slate-400">
+              {m.role === "user" ? "আপনি" : "AI"}
             </div>
-          ))}
-          {loading && (
-            <div className="text-xs text-emerald-400 animate-pulse">
-              AI ফাইল বিশ্লেষণ ও আপডেট করছে...
-            </div>
-          )}
-        </div>
-
-        {/* স্ক্রিনশট প্রিভিউ ও ইনপুট */}
-        {imgBase64 && (
-          <div className="px-3 py-1.5 bg-slate-800/80 flex items-center justify-between text-xs">
-            <span>স্ক্রিনশট যুক্ত করা হয়েছে</span>
-            <button onClick={() => setImgBase64("")} className="text-red-400">
-              সরান
-            </button>
+            <div className="whitespace-pre-wrap">{m.content}</div>
+          </div>
+        ))}
+        {isLoading && (
+          <div className="rounded-lg bg-slate-800 p-3 text-xs text-emerald-400">
+            ফাইলগুলোতে কোড জেনারেট হচ্ছে...
           </div>
         )}
+      </div>
 
-        <form onSubmit={handleSubmit} className="p-2.5 border-t border-slate-800 flex items-center gap-2">
-          <label className="px-2.5 py-2 rounded-lg bg-slate-800 text-xs cursor-pointer">
-            📷
-            <input type="file" accept="image/*" onChange={handleScreenshot} className="hidden" />
-          </label>
+      <form onSubmit={handleSend} className="border-t border-slate-800 p-3">
+        <div className="flex gap-2">
           <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="বাংলায় বা যেকোনো ভাষায় লিখুন..."
-            className="flex-1 rounded-lg bg-slate-800 border border-slate-700 px-3 py-2 text-xs"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="যেমন: চ্যাট স্ক্রিন ও কল বাটন যুক্ত করো..."
+            className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm"
           />
           <button
             type="submit"
-            disabled={loading}
-            className="px-3 py-2 rounded-lg bg-emerald-600 text-xs font-semibold disabled:opacity-50"
+            disabled={isLoading}
+            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold hover:bg-emerald-500 disabled:opacity-50"
           >
             পাঠান
           </button>
-        </form>
-      </div>
+        </div>
+      </form>
     </div>
   );
-}
+};
