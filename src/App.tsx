@@ -213,11 +213,15 @@ export default function App() {
         </main>
       </div>
 
-      <ProjectSetupModal isOpen="{isSetupOpen}" onClose="{()"> setIsSetupOpen(false)}
+      <ProjectSetupModal
+        isOpen={isSetupOpen}
+        onClose={() => setIsSetupOpen(false)}
         onCreateProject={handleCreateProject}
       />
 
-      <AIChatDrawer isOpen="{isChatOpen}" onClose="{()"> setIsChatOpen(false)}
+      <AIChatDrawer
+        isOpen={isChatOpen}
+        onClose={() => setIsChatOpen(false)}
         messages={messages}
         apiKey={apiKey}
         onChangeApiKey={setApiKey}
@@ -226,11 +230,16 @@ export default function App() {
       />
 
       {isReviewOpen && (
-        <ReviewPage files="{project.files}" issues="{issues}" onClose="{()"> setIsReviewOpen(false)}
+        <ReviewPage
+          files={project.files}
+          issues={issues}
+          onClose={() => setIsReviewOpen(false)}
         />
       )}
 
-      <GitHubPushModal isOpen="{isPushOpen}" onClose="{()"> setIsPushOpen(false)}
+      <GitHubPushModal
+        isOpen={isPushOpen}
+        onClose={() => setIsPushOpen(false)}
         files={project.files}
         defaultProjectName={project.name}
       />
