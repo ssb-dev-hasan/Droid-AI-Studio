@@ -6,7 +6,7 @@ import { ReviewPage } from "./components/ReviewPage";
 import { runAIStudioTask } from "./services/aiService";
 import { pushAllFilesToGitHub } from "./services/githubService";
 import { createInitialProjectFiles } from "./templates/androidProject";
-import { AIProvider, ChatMessage, ProjectMeta, StudioUserConfig } from "./types/studio";
+import { ChatMessage, ProjectMeta, StudioUserConfig } from "./types/studio";
 import { detectProjectErrors } from "./utils/errorChecker";
 
 const DEFAULT_META: ProjectMeta = {
@@ -53,7 +53,6 @@ export function App() {
   const [aiLoading, setAiLoading] = useState(false);
   const [bannerMsg, setBannerMsg] = useState("");
 
-  // ইউজার বদলালে আলাদা স্টোরেজ লোড হবে (একজনের ডেটা অন্যজনের সাথে মিশবে না)
   useEffect(() => {
     const raw = localStorage.getItem(storageKey);
     if (raw) {
@@ -213,7 +212,6 @@ export function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-white flex flex-col">
-      {/* Top Studio Bar */}
       <header className="p-2.5 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="font-bold text-sm text-emerald-400">ড্রয়িড এআই স্টুডিও</span>
@@ -261,7 +259,6 @@ export function App() {
         </div>
       )}
 
-      {/* ফাইল সিলেক্টর */}
       <div className="p-2 border-b border-slate-800 bg-slate-900/60 flex items-center gap-2 overflow-x-auto">
         {filePaths.map((path) => {
           const hasErr = errors.some((e) => e.filePath === path);
@@ -283,7 +280,6 @@ export function App() {
         })}
       </div>
 
-      {/* কোড এডিটর */}
       <main className="flex-1 flex flex-col p-2.5 gap-2">
         <div className="text-[11px] font-mono text-slate-400 truncate">{activeFile}</div>
         <textarea
@@ -293,7 +289,6 @@ export function App() {
           className="flex-1 min-h-[320px] w-full rounded-xl bg-slate-900 border border-slate-800 p-3 font-mono text-xs leading-relaxed text-slate-100 focus:outline-none focus:border-blue-500"
         />
 
-        {/* এরর কনসোল */}
         {errors.length > 0 && (
           <div className="rounded-xl border border-red-500/50 bg-red-950/30 p-2.5 space-y-1">
             <p className="text-xs font-bold text-red-300">এররসমূহ ({errors.length}):</p>
@@ -322,8 +317,12 @@ export function App() {
         <AIChatDrawer
           provider={userConfig.aiProvider}
           apiKey={userConfig.apiKey}
-          onChangeProvider={(aiProvider) => setUserConfig((p) => ({ ...p, aiProvider }))}
-          onChangeApiKey={(apiKey) => setUserConfig((p) => ({ ...p, apiKey }))}
+          onChangeProvider={(aiProvider) =>
+            setUserConfig((p) => ({ ...p, aiProvider }))
+          }
+          onChangeApiKey={(apiKey) =>
+            setUserConfig((p) => ({ ...p, apiKey }))
+          }
           messages={messages}
           loading={aiLoading}
           onSend={handleAISend}
